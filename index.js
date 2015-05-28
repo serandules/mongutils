@@ -1,4 +1,5 @@
-var debug = require('debug')('serandules:mongutils');
+var log = require('logger')('mongutils');
+
 module.exports.objectId = function (id) {
     return id.match(/^[0-9a-fA-F]{24}$/);
 };

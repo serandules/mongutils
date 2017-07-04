@@ -200,3 +200,20 @@ exports.errors.WriteConcernError = [exports.errors.WriteConcernFailed,
     exports.errors.WriteConcernLegacyOK,
     exports.errors.UnknownReplWriteConcern,
     exports.errors.CannotSatisfyWriteConcern];
+
+exports.ensureIndexes = function (schema) {
+    var paths = schema.paths;
+    Object.keys(paths).forEach(function (path) {
+        var o = paths[path];
+        var options = o.options || {};
+        if (!options.searchable && !options.sortable) {
+            return;
+        }
+        var index = {};
+        index[path] = 1;
+        if (options.sortable) {
+            index._id = 1;
+        }
+        schema.index(index);
+    });
+};

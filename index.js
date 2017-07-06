@@ -201,7 +201,7 @@ exports.errors.WriteConcernError = [exports.errors.WriteConcernFailed,
     exports.errors.UnknownReplWriteConcern,
     exports.errors.CannotSatisfyWriteConcern];
 
-exports.ensureIndexes = function (schema) {
+exports.ensureIndexes = function (schema, compounds) {
     var paths = schema.paths;
     Object.keys(paths).forEach(function (path) {
         var o = paths[path];
@@ -216,4 +216,8 @@ exports.ensureIndexes = function (schema) {
         }
         schema.index(index);
     });
+    compounds.forEach(function (o) {
+        schema.index(o);
+    });
+    schema.compounds = compounds
 };

@@ -1,4 +1,5 @@
 var log = require('logger')('mongutils');
+var mongoose = require('mongoose')
 
 module.exports.objectId = function (id) {
     return id.match(/^[0-9a-fA-F]{24}$/);
@@ -220,4 +221,40 @@ exports.ensureIndexes = function (schema, compounds) {
         schema.index(o);
     });
     schema.compounds = compounds
+};
+
+exports.cast = function (model, data) {
+    var schema = model.schema;
+    var paths = schema.paths;
+    var field;
+    var options;
+    var type;
+    for (field in data) {
+        if (!data.hasOwnProperty(field)) {
+            continue;
+        }
+        options = paths[field].options;
+        type = options.type;
+        data[field] = new type(data[field]);
+    }
+    return data;
+};
+
+exports.find = function (model, data) {
+    var paging = data.paging;
+    var query = model.find({}).sort(paging.sort).hint(paging.sort).limit(paging.count);
+    var fields = data.fields;
+    if (fields) {
+        query.select(fields);
+    }
+    var cursor = paging.cursor;
+    if (cursor) {
+        var o = cursor.min || cursor.max;
+        exports.cast(model, o);
+        query.setOptions(cursor);
+        if (cursor.min) {
+            query.skip(1);
+        }
+    }
+    return query;
 };

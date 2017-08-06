@@ -1,5 +1,7 @@
 var log = require('logger')('mongutils');
-var mongoose = require('mongoose')
+var mongoose = require('mongoose');
+var ObjectID = require('mongodb').ObjectID;
+var _ = require('lodash');
 
 module.exports.objectId = function (id) {
     return id.match(/^[0-9a-fA-F]{24}$/);
@@ -212,15 +214,23 @@ exports.ensureIndexes = function (schema, compounds) {
         }
         var index = {};
         index[path] = 1;
-        if (options.sortable) {
-            index._id = 1;
+        if (!options.sortable) {
+            schema.index(index);
+            return;
         }
+        index._id = 1;
+        compounds.push(index);
         schema.index(index);
     });
+    var extended = [];
     compounds.forEach(function (o) {
         schema.index(o);
+        var exd = _.cloneDeep(o);
+        exd[Object.keys(exd)[0]] = -1;
+        schema.index(exd);
+        extended.push(exd);
     });
-    schema.compounds = compounds
+    schema.compounds = compounds.concat(extended);
 };
 
 exports.cast = function (model, data) {
@@ -235,26 +245,139 @@ exports.cast = function (model, data) {
         }
         options = paths[field].options;
         type = options.type;
+        if (field === '_id') {
+            data[field] = new ObjectID(data[field]);
+            continue
+        }
         data[field] = new type(data[field]);
     }
     return data;
 };
 
-exports.find = function (model, data) {
-    var paging = data.paging;
-    var query = model.find({}).sort(paging.sort).hint(paging.sort).limit(paging.count);
-    var fields = data.fields;
-    if (fields) {
-        query.select(fields);
+exports.invert = function (o) {
+    var key;
+    var clone = _.cloneDeep(o);
+    for (key in clone) {
+        if (!clone.hasOwnProperty(key)) {
+            continue;
+        }
+        clone[key] *= -1;
     }
-    var cursor = paging.cursor;
-    if (cursor) {
-        var o = cursor.min || cursor.max;
-        exports.cast(model, o);
-        query.setOptions(cursor);
-        if (cursor.min) {
-            query.skip(1);
+    return clone;
+};
+
+exports.first = function (o) {
+    var key;
+    for (key in o) {
+        if (!o.hasOwnProperty(key)) {
+            continue;
+        }
+        return key;
+    }
+    return null;
+};
+
+exports.cursor = function (index, o) {
+    var field;
+    var cursor = {};
+    for (field in index) {
+        if (!index.hasOwnProperty(field)) {
+            continue;
+        }
+        cursor[field] = o[field];
+    }
+    return cursor;
+};
+
+// TODO cursor without direction is an invalid query
+exports.find = function (model, data, done) {
+    var hint;
+    var invert;
+    var sorter;
+    var paging = data.paging;
+    var query = paging.query;
+    var sort = paging.sort;
+    var count = data.count + 1;
+    var order = sort[exports.first(sort)];
+    var direction = paging.direction || order;
+    var natural = (direction === 1);
+    if (order === 1) {
+        hint = sort;
+        invert = !natural
+        sorter = invert ? exports.invert(sort) : sort;
+    } else {
+        hint = exports.invert(sort);
+        invert = natural
+        sorter = invert ? hint : sort;
+    }
+    var options = {};
+    if (paging.cursor) {
+        if (natural) {
+            options.min = paging.cursor;
+        } else {
+            options.max = paging.cursor;
         }
     }
-    return query;
+    // TODO: build proper cursor with fields in order
+    model.find(query)
+        .lean()
+        .sort(sorter)
+        .select(data.fields)
+        .limit(count)
+        .hint(hint)
+        .setOptions(options)
+        .exec(function (err, o) {
+            if (err) {
+                return done(err);
+            }
+            var left = null;
+            var right = null;
+            if (natural) {
+                if (o.length === count) {
+                    right = {
+                        query: query,
+                        sort: sort,
+                        cursor: exports.cursor(hint, o.pop()),
+                        direction: 1
+                    };
+                }
+                if (paging.cursor) {
+                    left = {
+                        query: query,
+                        sort: sort,
+                        cursor: paging.cursor,
+                        direction: -1
+                    };
+                }
+            } else {
+                if (paging.cursor) {
+                    right = {
+                        query: query,
+                        sort: sort,
+                        cursor: paging.cursor,
+                        direction: 1
+                    };
+                }
+                if (o.length === count) {
+                    o.pop();
+                    left = {
+                        query: query,
+                        sort: sort,
+                        cursor: exports.cursor(hint, o[o.length - 1]),
+                        direction: -1
+                    };
+                }
+            }
+            var last;
+            var next;
+            if (order === 1) {
+                next = right;
+                last = left;
+            } else {
+                next = left;
+                last = right;
+            }
+            o = invert ? o.reverse() : o;
+            done(null, o, {last: last, next: next})
+        });
 };

@@ -294,12 +294,11 @@ exports.find = function (model, data, done) {
     var hint;
     var invert;
     var sorter;
-    var paging = data.paging;
-    var query = paging.query;
-    var sort = paging.sort;
+    var query = data.query;
+    var sort = data.sort;
     var count = data.count + 1;
     var order = sort[exports.first(sort)];
-    var direction = paging.direction || order;
+    var direction = data.direction || order;
     var natural = (direction === 1);
     if (order === 1) {
         hint = sort;
@@ -311,11 +310,11 @@ exports.find = function (model, data, done) {
         sorter = invert ? hint : sort;
     }
     var options = {};
-    if (paging.cursor) {
+    if (data.cursor) {
         if (natural) {
-            options.min = paging.cursor;
+            options.min = data.cursor;
         } else {
-            options.max = paging.cursor;
+            options.max = data.cursor;
         }
     }
     // TODO: build proper cursor with fields in order
@@ -341,20 +340,20 @@ exports.find = function (model, data, done) {
                         direction: 1
                     };
                 }
-                if (paging.cursor) {
+                if (data.cursor) {
                     left = {
                         query: query,
                         sort: sort,
-                        cursor: paging.cursor,
+                        cursor: data.cursor,
                         direction: -1
                     };
                 }
             } else {
-                if (paging.cursor) {
+                if (data.cursor) {
                     right = {
                         query: query,
                         sort: sort,
-                        cursor: paging.cursor,
+                        cursor: data.cursor,
                         direction: 1
                     };
                 }

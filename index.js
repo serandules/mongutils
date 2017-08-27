@@ -289,6 +289,10 @@ exports.cursor = function (index, o) {
     return cursor;
 };
 
+exports.findOne = function (model, query, done) {
+    model.findOne(query).exec(done);
+};
+
 // TODO cursor without direction is an invalid query
 exports.find = function (model, data, done) {
     var hint;
@@ -319,7 +323,6 @@ exports.find = function (model, data, done) {
     }
     // TODO: build proper cursor with fields in order
     model.find(query)
-        .lean()
         .sort(sorter)
         .select(data.fields)
         .limit(count)
